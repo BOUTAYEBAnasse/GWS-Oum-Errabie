@@ -2,6 +2,10 @@
 
 **Bassin de l'Oum Er-Rbia, Maroc**
 
+![Schéma de l'approche : le GWS de GLDAS à 0,25°, incomplet sur 6 mois, est complété par le bloc de prédiction temporelle puis affiné à 0,05° par le bloc de descente d'échelle ; les deux blocs partagent la même préparation des variables.](assets/approche_pipeline.png)
+
+*Vue d'ensemble de l'approche. Les deux cartes sont celles du 01/08/2025, une date absente des données GLDAS.*
+
 Ce travail complète et affine les données de stockage des eaux souterraines (GWS, *Groundwater Storage*) de GLDAS sur le bassin de l'Oum Er-Rbia. Il enchaîne deux blocs de prédiction, tous deux fondés sur un Random Forest « hydro-aware » :
 
 - **Bloc 1 — Prédiction temporelle :** comble les 6 mois de GWS absents de GLDAS (du 01/07/2025 au 31/12/2025), au pas journalier et à 0,25°.
@@ -331,7 +335,11 @@ Modèles classés par R² décroissant.
 
 ### 6.3 Cartes de GWS prédites puis affinées
 
-Les cartes sont produites pour quatre dates de la période prédite, absente des données GLDAS : 01/07/2025, 01/08/2025, 01/09/2025 et 01/10/2025. Chaque date est représentée à 0,25° (sortie du bloc 1) et à 0,05° (sortie du bloc 2), sur une même échelle de couleurs allant de 278 à 745 mm.
+Exemples de cartes produites pour quatre dates de la période prédite, absente des données GLDAS : 01/07/2025, 01/08/2025, 01/09/2025 et 01/10/2025. Chaque date est représentée à 0,25° (sortie du bloc 1) et à 0,05° (sortie du bloc 2), sur une même échelle de couleurs allant de 278 à 745 mm.
+
+![Cartes du GWS sur le bassin de l'Oum Er-Rbia aux 01/07, 01/08, 01/09 et 01/10/2025 : à gauche la prédiction temporelle à 0,25°, à droite la carte affinée à 0,05°.](assets/resultats_cartes_gws.png)
+
+*Cartes de GWS prédites à 0,25° (à gauche), puis affinées à 0,05° (à droite).*
 
 - Les prédictions temporelles sont spatialement lisses, donc plausibles sur toute la période prédite.
 - Les cartes à 0,05° restent alignées sur les cartes à 0,25° : même structure spatiale, avec un détail nettement plus fin.
@@ -345,6 +353,9 @@ Les cartes sont produites pour quatre dates de la période prédite, absente des
 .
 ├── README.md
 ├── .gitignore
+├── assets/
+│   ├── approche_pipeline.png
+│   └── resultats_cartes_gws.png
 └── notebooks/
     ├── approche_proposee/
     │   └── SR_GWS_HADA_HydroFE_Colab_sansXAI.ipynb
