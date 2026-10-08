@@ -17,6 +17,8 @@ Les prédictions des deux blocs sont expliquées par une **approche d'explicabil
 
 Ce dépôt contient les notebooks Google Colab de l'approche proposée et des 16 modèles de référence : voir [Contenu du dépôt](#7-contenu-du-dépôt) et [Exécution sur Google Colab](#8-exécution-sur-google-colab).
 
+**Données :** les rasters d'entrée et les fichiers d'index sont rassemblés dans le dossier Google Drive [`input_data_ML`](https://drive.google.com/drive/folders/1fRrrsy8UjuUfrXisqcNBx8NwshQ-QVcR). La section [Préparer les données](#préparer-les-données) explique comment le rendre accessible aux notebooks.
+
 | Indicateur | Pipeline proposé | Random Forest de base |
 |---|---|---|
 | R² (prédiction temporelle) | 0,993 | 0,985 |
@@ -475,7 +477,7 @@ En résumé, la proximité du réseau hydrographique, la topographie (TWI) et l'
         └── GWS_Elastiknet_Colab.ipynb
 ```
 
-Les données (rasters) ne sont pas dans le dépôt : elles sont lues sur Google Drive.
+Les données (rasters et fichiers d'index) ne sont pas dans le dépôt : elles sont dans le dossier Google Drive [`input_data_ML`](https://drive.google.com/drive/folders/1fRrrsy8UjuUfrXisqcNBx8NwshQ-QVcR), d'où les notebooks les lisent.
 
 ### 7.1 Approche proposée
 
@@ -554,8 +556,40 @@ Le notebook Gaussian Process fait exception sur deux points : il exige une secti
 
 ### Préparer les données
 
-1. Placer le dossier `input_data_ML` à la racine de « Mon Drive ». Les notebooks le lisent à l'emplacement `/content/drive/MyDrive/input_data_ML`.
-2. Y déposer les rasters, ainsi que les fichiers d'index `name_files.txt` (modèles de référence) et `name_files_SR.txt` (approche proposée).
+Les données sont partagées dans le dossier Google Drive suivant :
+
+**[input_data_ML — Google Drive](https://drive.google.com/drive/folders/1fRrrsy8UjuUfrXisqcNBx8NwshQ-QVcR)**
+
+Il contient les rasters d'entrée ainsi que les fichiers d'index `name_files.txt` (modèles de référence) et `name_files_SR.txt` (approche proposée). Les notebooks le lisent à l'emplacement `/content/drive/MyDrive/input_data_ML`, c'est-à-dire à la racine de « Mon Drive ». Ils y **écrivent aussi leurs résultats** : il faut donc pouvoir écrire dans ce dossier.
+
+**Cas 1 — vous avez les droits de modification sur le dossier partagé**
+
+1. Ouvrir le lien ci-dessus.
+2. Faire un clic droit sur `input_data_ML` → *Organiser* → *Ajouter un raccourci*, puis choisir **Mon Drive** (la racine).
+3. Le raccourci apparaît dans Colab sous `/content/drive/MyDrive/input_data_ML` : aucune autre étape n'est nécessaire.
+
+**Cas 2 — vous n'avez qu'un accès en lecture (cas le plus courant)**
+
+Les notebooks ne pourraient pas écrire leurs résultats dans le dossier partagé : il faut en faire une copie personnelle dans « Mon Drive ».
+
+1. Ouvrir le lien ci-dessus, puis ajouter un raccourci vers `input_data_ML` dans un sous-dossier de « Mon Drive », par exemple `Mon Drive/partage/` (et non à la racine, pour éviter un conflit de nom avec la copie).
+2. Dans un notebook Colab, monter Drive puis copier le dossier à la racine de « Mon Drive » :
+
+```python
+from google.colab import drive
+drive.mount('/content/drive')
+
+!cp -r "/content/drive/MyDrive/partage/input_data_ML" "/content/drive/MyDrive/"
+!ls "/content/drive/MyDrive/input_data_ML" | head
+```
+
+La copie peut prendre du temps, selon le volume des rasters ; elle n'est à faire qu'une fois. Le raccourci de `Mon Drive/partage/` peut ensuite être supprimé.
+
+**Utiliser un autre emplacement.** Si le dossier est placé ailleurs dans votre Drive, modifier `BASE_DIR` dans la cellule « Paramètres » de chaque notebook :
+
+```python
+BASE_DIR = "/content/drive/MyDrive/<chemin>/input_data_ML"
+```
 
 Un fichier d'index liste les rasters par section :
 
@@ -573,7 +607,7 @@ Les chemins sont relatifs à `input_data_ML`, et la date de chaque raster journa
 ### Lancer un notebook
 
 1. Ouvrir le notebook dans Colab (*Fichier → Ouvrir un notebook → GitHub*, ou *Importer* le fichier `.ipynb`).
-2. Lancer *Exécution → Tout exécuter*. Les premières cellules montent Google Drive, installent `rasterio` (et `pytorch-tabnet`, `lightgbm` ou `xgboost` selon le notebook), puis contrôlent que chaque entrée du fichier d'index correspond à un fichier présent sur Drive.
+2. Lancer *Exécution → Tout exécuter*. Les premières cellules montent Google Drive (autoriser l'accès au compte qui contient `input_data_ML`), installent `rasterio` (et `pytorch-tabnet`, `lightgbm` ou `xgboost` selon le notebook), puis contrôlent que chaque entrée du fichier d'index correspond à un fichier présent sur Drive.
 3. Les résultats sont écrits sur Drive, dans le dossier de sortie indiqué en section 7.
 
 Le code des scripts d'origine est repris tel quel ; les lignes ajoutées ou modifiées pour Colab sont repérées par le commentaire `# [COLAB]`, et les cellules d'analyse ajoutées au notebook de l'approche proposée par `# [AJOUT]`.
