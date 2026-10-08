@@ -13,6 +13,8 @@ Ce travail complète et affine les données de stockage des eaux souterraines (G
 
 Le résultat est une série de GWS journalière, complète et à 0,05°, du 01/01/2020 au 31/12/2025.
 
+Les prédictions des deux blocs sont expliquées par une **approche d'explicabilité (XAI) à deux couches** : **Geo-XAI** montre *où* le modèle concentre son attention et *où* il est le moins sûr, et **HydroINV-XAI** identifie *quelle variable d'entrée* explique chaque prédiction (voir [4.5](#45-explicabilité-xai--une-approche-à-deux-couches) et [6.4](#64-explicabilité--résultats-et-interprétations)).
+
 Ce dépôt contient les notebooks Google Colab de l'approche proposée et des 16 modèles de référence : voir [Contenu du dépôt](#7-contenu-du-dépôt) et [Exécution sur Google Colab](#8-exécution-sur-google-colab).
 
 | Indicateur | Pipeline proposé | Random Forest de base |
@@ -104,9 +106,11 @@ flowchart TD
     F --> I
     I --> J["Cohérence multi-échelle<br/>recalage sur la valeur GLDAS à 0,25°"]
     J --> K["GWS journalier, complet et à 0,05°<br/>du 01/01/2020 au 31/12/2025"]
+    G -.-> X["Explicabilité (XAI) à deux couches<br/>Geo-XAI : attention + incertitude<br/>HydroINV-XAI : variable la plus explicative"]
+    J -.-> X
 ```
 
-Les variables sélectionnées alimentent un Random Forest régularisé dans chacun des deux blocs.
+Les variables sélectionnées alimentent un Random Forest régularisé dans chacun des deux blocs. Les prédictions des deux blocs sont ensuite expliquées par la couche XAI (section 4.5).
 
 ### 4.2 Préparation des variables (commune aux deux blocs)
 
@@ -240,6 +244,56 @@ Pendant l'apprentissage, les prédictions à 0,05° sont corrigées pour rester 
 
 L'écart Δ(k) est donc redistribué entre les pixels fins au prorata de leur attention : la correction va là où l'information hydrologique est la plus pertinente.
 
+### 4.5 Explicabilité (XAI) : une approche à deux couches
+
+Le pipeline combine deux blocs de prédiction et plusieurs contributions : une couche d'explicabilité est donc nécessaire pour comprendre ses prédictions. Elle répond à deux questions complémentaires.
+
+| Couche | Question | Principe |
+|---|---|---|
+| **Geo-XAI** (descriptive) | *Où ?* | Zones sur lesquelles le modèle se concentre, et zones où il est le moins confiant |
+| **HydroINV-XAI** (inverse, « hydro-aware ») | *Quelle variable ?* | Variable d'entrée qui explique le mieux chaque prédiction, mesurée par sa réponse à de petites perturbations |
+
+#### Geo-XAI : explication géographique
+
+- **Carte d'attention :** la carte d'attention hydro-aware produite à chaque prédiction (bloc temporel et bloc de descente d'échelle) sert de carte explicative.
+- **Carte d'incertitude :** pour chaque pixel *x*, écart-type des prédictions des *M* arbres du Random Forest :
+
+```math
+\mathrm{err}(x) = \sqrt{\dfrac{1}{M}\sum_{m=1}^{M} \big(\hat{y}_m(x) - \bar{y}(x)\big)^2}
+```
+
+où ŷ<sub>m</sub>(x) est la prédiction de l'arbre *m* et ȳ(x) la moyenne des prédictions de tous les arbres. Un écart-type élevé signale une prédiction peu fiable.
+
+La lecture se fait à deux niveaux : la capacité du modèle à se concentrer sur certaines zones, et la localisation des pixels où ses prédictions sont les moins sûres, pour les deux blocs.
+
+#### HydroINV-XAI : explication inverse « hydro-aware »
+
+1. **Pixels cibles :** les pixels aux plus fortes prédictions (au-dessus du 90<sup>e</sup> centile) :
+
+```math
+\mathcal{S} = \{\, x \in \Omega \;:\; \hat{y}(x) \geq Q_{0,90}(\hat{y}) \,\}
+```
+
+2. **Sensibilité locale et variation requise :** pour chaque pixel cible *x′* et chaque variable *v*, l'écart Δy = y′ − ŷ(x′) est converti en variation d'entrée, à partir du gradient local de la prédiction (la variable est ignorée si |h<sub>v</sub>| < ε) :
+
+```math
+h_v = \dfrac{\delta y_v}{\varepsilon}, \qquad \Delta\mu_v = \dfrac{\Delta y}{h_v}
+```
+
+3. **Répartition sur les cellules amont :** la variation est distribuée sur les cellules amont de *x′*, pondérées par β (calculé à partir de la carte d'attention et du graphe D-8), en cherchant la plus petite perturbation, bornée par l'écart-type spatial journalier σ<sub>v,d</sub> de la variable :
+
+```math
+\Delta V_v = \arg\min_{\Delta V} \lVert \Delta V \rVert_2^2 \quad \text{avec} \quad \beta^{\top}\Delta V \approx \Delta\mu_v, \quad |\Delta V_i| \leq \sigma_{v,d}
+```
+
+4. **Coût de l'explication :** la variable de coût minimal est retenue comme la plus explicative du pixel :
+
+```math
+\mathrm{Cost}_v = \lVert \Delta V_v \rVert_1 + 10\,\big|\Delta y - h_v\,\beta^{\top}\Delta V_v\big|
+```
+
+Le premier terme mesure l'ampleur de la perturbation ; le second, pondéré par 10, l'écart entre l'erreur à expliquer et celle produite par la seule variable *v*. Pour chaque date, on obtient la variable la plus explicative de chaque pixel, ainsi que les cartes des poids β et des perturbations ΔV.
+
 ---
 
 ## 5. Protocole expérimental et évaluation
@@ -345,6 +399,47 @@ Exemples de cartes produites pour quatre dates de la période prédite, absente 
 - Les cartes à 0,05° restent alignées sur les cartes à 0,25° : même structure spatiale, avec un détail nettement plus fin.
 - Les résultats sont cohérents d'une date à l'autre pour les deux blocs.
 
+### 6.4 Explicabilité : résultats et interprétations
+
+#### Geo-XAI : cartes d'attention
+
+![Cartes d'attention XAI sur le bassin de l'Oum Er-Rbia aux 01/07, 01/08, 01/09 et 01/10/2025, avec une attention allant de 0 à 1.](assets/xai_cartes_attention.png)
+
+*Cartes d'attention XAI aux quatre dates de la période prédite (attention de 0 à 1).*
+
+- La distribution de l'attention amont reste **stable d'une date à l'autre** : les variables importantes pour la prédiction sont les mêmes dans le temps, ce qui valide l'attention hydro-aware.
+- **Plus de 80 % du bassin** présente une attention élevée, proche de 1, là où les variables d'entrée présentent une forte variabilité spatiale et temporelle.
+
+#### HydroINV-XAI : variables d'entrée les plus explicatives
+
+Les résultats de l'algorithme inverse sont moyennés sur tous les pixels d'une image, puis sur toutes les valeurs prédites par les deux blocs.
+
+![Carte de la variable d'entrée la plus explicative pour chaque pixel du bassin de l'Oum Er-Rbia : la distance aux cours d'eau domine le centre et l'est du bassin, l'évapotranspiration le nord-ouest, et le TWI est réparti sur l'ensemble.](assets/xai_variables_decisives.png)
+
+*Variable la plus explicative pour chaque pixel du bassin.*
+
+| Rang | Variable | Nombre moyen de pixels | Écart-type |
+|---|---|---|---|
+| 1 | Distance aux cours d'eau | 520 | 18,3 |
+| 2 | TWI | 300 | 15,4 |
+| 3 | Évapotranspiration (ET) | 260 | 14,6 |
+| 4 | Ruissellement de subsurface (Qsb) | 110 | 10,0 |
+| 5 | Humidité de la zone racinaire (RZSM) | 85 | 9,0 |
+| 6 | Précipitations API | 60 | 7,7 |
+| 7 | Précipitations IDW | 45 | 6,6 |
+| 8 | NDVI | 30 | 5,4 |
+| 9 | Température de surface (LST) | 25 | 5,0 |
+| 10 | Humidité du sol (SM) | 19 | 4,3 |
+| 11 | Pente | 1 | 1,0 |
+
+Les variables se répartissent en trois groupes :
+
+- **Variables dominantes — distance aux cours d'eau, TWI, ET :** elles dominent la majorité des pixels du bassin et forment l'ensemble explicatif principal des prédictions.
+- **Influence secondaire — Qsb, RZSM, API, IDW, NDVI :** leur influence sur le GWS est plus faible, mais elles sont le facteur explicatif dominant dans certaines sous-zones du bassin.
+- **Influence marginale — LST, humidité du sol, pente :** elles expliquent très rarement la variation du GWS sur le bassin et peuvent être exclues de l'analyse.
+
+En résumé, la proximité du réseau hydrographique, la topographie (TWI) et l'évapotranspiration expliquent l'essentiel des prédictions de GWS sur l'Oum Er-Rbia.
+
 ---
 
 ## 7. Contenu du dépôt
@@ -355,10 +450,12 @@ Exemples de cartes produites pour quatre dates de la période prédite, absente 
 ├── .gitignore
 ├── assets/
 │   ├── approche_pipeline.png
-│   └── resultats_cartes_gws.png
+│   ├── resultats_cartes_gws.png
+│   ├── xai_cartes_attention.png
+│   └── xai_variables_decisives.png
 └── notebooks/
     ├── approche_proposee/
-    │   └── SR_GWS_HADA_HydroFE_Colab_sansXAI.ipynb
+    │   └── SR_GWS_HADA_HydroFE_Colab_avecXAI.ipynb
     └── modeles_reference/
         ├── GWS_RFR_Colab.ipynb
         ├── GWS_ExtraTreesRegressor_Colab.ipynb
@@ -382,18 +479,41 @@ Les données (rasters) ne sont pas dans le dépôt : elles sont lues sur Google 
 
 ### 7.1 Approche proposée
 
-`notebooks/approche_proposee/SR_GWS_HADA_HydroFE_Colab_sansXAI.ipynb`
+`notebooks/approche_proposee/SR_GWS_HADA_HydroFE_Colab_avecXAI.ipynb`
 
-Ce notebook enchaîne la fusion des entrées, le graphe D-8 et l'attention hydro-aware (HADA), l'ingénierie des variables hydrologiques (Hydro-FE), la sélection de variables (TabNet puis mRMR), le Random Forest régularisé, l'export des prédictions à la résolution GLDAS, puis la descente d'échelle avec cohérence multi-échelle.
+Ce notebook enchaîne la fusion des entrées, le graphe D-8 et l'attention hydro-aware (HADA), l'ingénierie des variables hydrologiques (Hydro-FE), la sélection de variables (TabNet puis mRMR), le Random Forest régularisé, l'export des prédictions à la résolution GLDAS, la descente d'échelle avec cohérence multi-échelle, puis l'explicabilité à deux couches (Geo-XAI et HydroINV-XAI) pour chaque date cartographiée.
 
 | Élément | Valeur |
 |---|---|
 | Fichier d'index lu | `name_files_SR.txt` |
 | Sections attendues | `CHIRPS_Clipped`, `Precipitations_API`, `Total_GWS`, `SMAP_RZSM_Clipped` (optionnelle), `Slope`, `MNT`, `TWI`, `Distance_To_River` |
 | Dossier de sortie | `input_data_ML/SR_GWS_FUSION_HADA_HYDROFE_FS_XAI_HYDROINV_MULTI` |
-| Sorties | Rasters à résolution fine, prédictions à la résolution GLDAS (sous-dossier `COARSE_PRED`), fichiers de sélection de variables |
+| Sorties | Rasters à résolution fine, prédictions à la résolution GLDAS (sous-dossier `COARSE_PRED`), fichiers de sélection de variables, sorties Geo-XAI (sous-dossier `XAI`) et HydroINV-XAI (sous-dossier `XAI_HYDROINV`) |
 
-Il s'agit de la version sans XAI : les cartes Hydro-XAI, l'incertitude par arbre et HydroINV n'y figurent pas.
+#### Sorties de l'explicabilité
+
+| Couche | Fichiers (par date `AAAAMMJJ`) |
+|---|---|
+| Geo-XAI — `XAI/<date>/` | `XAI_Attention_<date>.tif` (carte d'attention, 0 → 1), `XAI_UncertaintySTD_<date>.tif` (écart-type des arbres du RF), `XAI_Feature_<variable>_<date>.tif` (variables et leurs dérivées amont), `XAI_MaskUsed_<date>.tif`, `XAI_FeatureStats_<date>.csv` |
+| HydroINV-XAI — `XAI_HYDROINV/` | `HydroINV_ResponsibilityCorridor_<date>.tif` (corridor amont responsable), `HydroINV_DeltaRAW_<variable>_<date>.tif` (perturbations ΔV retenues), `HydroINV_TargetPixels_<date>.csv` (variable choisie pour chaque pixel cible) |
+
+La dernière section du notebook (*12. Analyse des sorties XAI*) relit ces fichiers. Elle affiche les cartes d'attention et d'incertitude, calcule la part du bassin à forte attention et la stabilité de l'attention entre dates, puis classe les variables selon le nombre moyen de pixels cibles qu'elles expliquent. Ses tableaux sont enregistrés dans `XAI/GeoXAI_Indicateurs.csv` et `XAI_HYDROINV/HydroINV_Classement_variables.csv`.
+
+#### Paramètres de l'explicabilité (cellule 0.3)
+
+| Paramètre | Valeur par défaut | Rôle |
+|---|---|---|
+| `XAI_ENABLE` / `INV_ENABLE` | `True` / `True` | Active Geo-XAI / HydroINV-XAI |
+| `XAI_UNCERTAINTY_ENABLE` | `True` | Calcule la carte d'incertitude (écart-type des arbres) |
+| `INV_TARGET_STRATEGY`, `INV_TARGET_QUANTILE` | `"TOP_QUANTILE"`, `0.90` | Pixels cibles : prédictions au-dessus du 90<sup>e</sup> centile |
+| `INV_MAX_TARGET_PIXELS` | `150` | Nombre maximal de pixels cibles par date |
+| `INV_TARGET_MODE`, `INV_TARGET_PCTL` | `"TO_PERCENTILE"`, `50.0` | Écart Δy à expliquer : vers la médiane des prédictions de la date |
+| `INV_VARIABLES` | `["API", "CHIRPS", "RZSM"]` | Variables testées par HydroINV-XAI |
+| `INV_TOPM_SOURCES` | `128` | Nombre maximal de cellules amont perturbées |
+| `INV_MAX_DELTA_FACTOR`, `INV_EPS_FACTOR` | `1.0`, `0.02` | Borne de la perturbation (× écart-type spatial du jour) ; pas de la différence finie |
+| `XAI_PREFIXES`, `XAI_EVERY_N_DATES` | `("HIST", "FORECAST")`, `1` | Ajout Colab : dates traitées par la XAI (toutes par défaut) |
+
+Le notebook ne charge que les sections listées plus haut : HydroINV-XAI peut donc tester `CHIRPS`, `API`, `RZSM`, `TWI`, `DTR` (distance aux cours d'eau), `DEM` et `SLOPE`. Par défaut, le classement porte sur API, CHIRPS et RZSM. Pour le comparer à celui de la section 6.4, ajouter `TWI`, `DTR` et `SLOPE` à `INV_VARIABLES`.
 
 ### 7.2 Modèles de référence
 
@@ -456,7 +576,20 @@ Les chemins sont relatifs à `input_data_ML`, et la date de chaque raster journa
 2. Lancer *Exécution → Tout exécuter*. Les premières cellules montent Google Drive, installent `rasterio` (et `pytorch-tabnet`, `lightgbm` ou `xgboost` selon le notebook), puis contrôlent que chaque entrée du fichier d'index correspond à un fichier présent sur Drive.
 3. Les résultats sont écrits sur Drive, dans le dossier de sortie indiqué en section 7.
 
-Le code des scripts d'origine est repris tel quel ; les lignes ajoutées ou modifiées pour Colab sont repérées par le commentaire `# [COLAB]`.
+Le code des scripts d'origine est repris tel quel ; les lignes ajoutées ou modifiées pour Colab sont repérées par le commentaire `# [COLAB]`, et les cellules d'analyse ajoutées au notebook de l'approche proposée par `# [AJOUT]`.
+
+### Durée de calcul de l'explicabilité
+
+Par défaut, comme dans le script d'origine, l'explicabilité est calculée pour **toutes** les dates cartographiées (historique et période prédite). HydroINV-XAI est l'étape la plus longue, car elle calcule le gradient local du Random Forest pixel par pixel. Elle produit aussi un grand nombre de fichiers sur Drive.
+
+Pour une session Colab plus courte, restreindre les dates dans la cellule 0.3 :
+
+```python
+XAI_PREFIXES = ("FORECAST",)   # uniquement la période prédite
+XAI_EVERY_N_DATES = 30         # une date sur 30
+```
+
+`XAI_ENABLE = False` désactive entièrement l'explicabilité ; le notebook produit alors les mêmes sorties que la version sans XAI.
 
 ### Paramètres temporels réglés dans les notebooks
 
