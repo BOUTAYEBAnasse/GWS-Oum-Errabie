@@ -15,9 +15,9 @@ Le résultat est une série de GWS journalière, complète et à 0,05°, du 01/0
 
 Les prédictions des deux blocs sont expliquées par une **approche d'explicabilité (XAI) à deux couches** : **Geo-XAI** montre *où* le modèle concentre son attention et *où* il est le moins sûr, et **HydroINV-XAI** identifie *quelle variable d'entrée* explique chaque prédiction (voir [4.5](#45-explicabilité-xai--une-approche-à-deux-couches) et [6.4](#64-explicabilité--résultats-et-interprétations)).
 
-Ce dépôt contient les notebooks Google Colab de l'approche proposée et des 16 modèles de référence : voir [Contenu du dépôt](#7-contenu-du-dépôt) et [Exécution sur Google Colab](#8-exécution-sur-google-colab).
+Ce dépôt contient les notebooks Google Colab de l'approche proposée, des 16 modèles de référence et du téléchargement des données d'entrée depuis Google Earth Engine : voir [Contenu du dépôt](#7-contenu-du-dépôt) et [Exécution sur Google Colab](#8-exécution-sur-google-colab).
 
-**Données :** les rasters d'entrée et les fichiers d'index sont rassemblés dans le dossier Google Drive [`input_data_ML`](https://drive.google.com/drive/folders/1fRrrsy8UjuUfrXisqcNBx8NwshQ-QVcR). La section [Préparer les données](#préparer-les-données) explique comment le rendre accessible aux notebooks.
+**Données :** les rasters d'entrée et les fichiers d'index sont rassemblés dans le dossier Google Drive [`input_data_ML`](https://drive.google.com/drive/folders/1fRrrsy8UjuUfrXisqcNBx8NwshQ-QVcR). La section [Préparer les données](#préparer-les-données) explique comment le rendre accessible aux notebooks. Les rasters bruts peuvent aussi être retéléchargés depuis Google Earth Engine avec le notebook [`Download_inputs.ipynb`](notebooks/download/Download_inputs.ipynb) (voir [7.3](#73-téléchargement-des-données-dentrée)).
 
 | Indicateur | Pipeline proposé | Random Forest de base |
 |---|---|---|
@@ -66,7 +66,7 @@ Le GWS de GLDAS y suit de près les épisodes de sécheresse observés par le ND
 
 ## 3. Données d'entrée
 
-Quatorze variables sont extraites par des scripts Google Earth Engine sur le bassin, au pas journalier, du 01/01/2020 au 31/12/2025.
+Quatorze variables alimentent le pipeline, au pas journalier, du 01/01/2020 au 31/12/2025. Leurs données brutes sont extraites de Google Earth Engine sur le bassin par le notebook `notebooks/download/Download_inputs.ipynb` (voir [7.3](#73-téléchargement-des-données-dentrée)).
 
 | Variable | Pas de temps | Source | Résolution |
 |---|---|---|---|
@@ -85,6 +85,8 @@ Quatorze variables sont extraites par des scripts Google Earth Engine sur le bas
 | sin(2π·DoY/365) et cos(2π·DoY/365) | Journalier | Calculées (saisonnalité) | — |
 
 - Les rasters non journaliers (ET, NDVI) sont dupliqués sur leur période de rééchantillonnage.
+- SMAP est fourni toutes les 3 heures : le notebook de téléchargement en exporte la moyenne journalière.
+- Les précipitations IDW et API sont calculées après le téléchargement, à partir de CHIRPS.
 - Les deux variables de saisonnalité ne servent qu'au bloc de prédiction temporelle.
 
 ---
@@ -458,6 +460,8 @@ En résumé, la proximité du réseau hydrographique, la topographie (TWI) et l'
 └── notebooks/
     ├── approche_proposee/
     │   └── SR_GWS_HADA_HydroFE_Colab_avecXAI.ipynb
+    ├── download/
+    │   └── Download_inputs.ipynb
     └── modeles_reference/
         ├── GWS_RFR_Colab.ipynb
         ├── GWS_ExtraTreesRegressor_Colab.ipynb
@@ -477,7 +481,7 @@ En résumé, la proximité du réseau hydrographique, la topographie (TWI) et l'
         └── GWS_Elastiknet_Colab.ipynb
 ```
 
-Les données (rasters et fichiers d'index) ne sont pas dans le dépôt : elles sont dans le dossier Google Drive [`input_data_ML`](https://drive.google.com/drive/folders/1fRrrsy8UjuUfrXisqcNBx8NwshQ-QVcR), d'où les notebooks les lisent.
+Les données (rasters et fichiers d'index) ne sont pas dans le dépôt : elles sont dans le dossier Google Drive [`input_data_ML`](https://drive.google.com/drive/folders/1fRrrsy8UjuUfrXisqcNBx8NwshQ-QVcR), d'où les notebooks de modélisation les lisent. Le notebook de téléchargement ([7.3](#73-téléchargement-des-données-dentrée)) permet de reconstituer les rasters bruts depuis Google Earth Engine.
 
 ### 7.1 Approche proposée
 
@@ -550,6 +554,93 @@ Sections de `name_files.txt` utilisées par ces notebooks :
 
 Le notebook Gaussian Process fait exception sur deux points : il exige une section `CHIRPS_Clipped` pour les précipitations, et son entraînement est nettement plus long que celui des autres modèles.
 
+### 7.3 Téléchargement des données d'entrée
+
+`notebooks/download/Download_inputs.ipynb`
+
+Ce notebook télécharge depuis Google Earth Engine (GEE) les rasters bruts des variables de la section 3, sur le bassin, du 01/01/2020 au 31/12/2025. Il écrit un GeoTIFF par date dans des dossiers `PAPER_*`, à la racine de « Mon Drive ».
+
+| Variable | Asset GEE | Bande | Dossier Drive |
+|---|---|---|---|
+| GWS — cible | `NASA/GLDAS/V022/CLSM/G025/DA1D` | `GWS_tavg` | `PAPER_GWS_GLDAS` |
+| Stockage total en eau (TWS) | idem | `TWS_tavg` | `PAPER_TWS_GLDAS` |
+| RZSM, équivalent en eau de la neige, interception du couvert (3 bandes) | idem | `SoilMoist_RZ_tavg`, `SWE_tavg`, `CanopInt_tavg` | `PAPER_GLDAS_EQ1` |
+| Précipitations (base de IDW et API) | `UCSB-CHG/CHIRPS/DAILY` | `precipitation` | `PAPER_PRECIP_CHIRPS` |
+| Humidité du sol (SM) | `NASA/SMAP/SPL4SMGP/008` | `sm_surface` | `PAPER_SM_SMAP` |
+| Humidité de la zone racinaire (RZSM) | `NASA/SMAP/SPL4SMGP/008` | `sm_rootzone` | `PAPER_RZSM_SMAP` |
+| Évapotranspiration (ET) | `MODIS/061/MOD16A2GF` | `ET` | `PAPER_ET_MODIS` |
+| NDVI | `MODIS/061/MOD13Q1` | `NDVI` | `PAPER_NDVI_MODIS` |
+| Température de surface (LST) | `MODIS/061/MOD11A1` | `LST_Day_1km` | `PAPER_LST_MODIS` |
+| Ruissellement de subsurface (Qsb) | `ECMWF/ERA5_LAND/DAILY_AGGR` | `sub_surface_runoff_sum` | `PAPER_QSB_ERA5LAND` |
+| MNT (graphe D-8) | `USGS/SRTMGL1_003` | `elevation` | `PAPER_DEM_SRTM` |
+| Pente | `USGS/SRTMGL1_003` | — | `PAPER_SLOPE_SRTM` |
+| TWI | `USGS/SRTMGL1_003` et `MERIT/Hydro/v1_0_1` | — | `PAPER_TWI_SRTM` |
+| Distance aux cours d'eau, réseau hydrographique | `WWF/HydroSHEDS/v1/FreeFlowingRivers` | — | `PAPER_DISTRIVERS_HYDROSHEDS` |
+
+Les trois premières lignes donnent les termes du bilan GLDAS : GWS = TWS − RZSM − SWE − CI.
+
+#### Format des fichiers
+
+- **Nom :** `<préfixe>_AAAAMMJJ.tif` pour les séries temporelles (par exemple `PAPER_GWS_daily_20200101.tif`), `<préfixe>_static` pour les couches statiques.
+- **Contenu :** `float32`, EPSG:4326, découpé au bassin, `-9999` pour les pixels sans donnée.
+- **Valeurs brutes de l'asset :** les facteurs d'échelle ne sont pas appliqués (ET × 0,1 ; NDVI × 0,0001 ; LST × 0,02 ; Qsb en mètres).
+- **Grille :** GLDAS, CHIRPS, SMAP et ERA5-Land gardent leur grille native ; les produits MODIS sont rééchantillonnés en latitude/longitude à 500 m (ET), 250 m (NDVI) et 1 km (LST).
+- **Pas de temps :** une image par jour, sauf ET (une par composite de 8 jours) et NDVI (une par composite de 16 jours) ; SMAP est moyenné sur la journée.
+- **Couches statiques (30 m) :** exportées par des tâches GEE, qui peuvent découper une couche en plusieurs tuiles.
+
+Deux points diffèrent de la description des sections 1 et 3 :
+
+- **TWI :** GEE ne calcule pas d'accumulation de flux. Le notebook combine la pente SRTM et l'aire drainée amont de MERIT Hydro (≈ 90 m) : c'est une approximation d'un TWI calculé entièrement sur le SRTM à 30 m.
+- **GLDAS après le 30/06/2025 :** le catalogue GEE va désormais au-delà de cette date ; le GWS de juillet à décembre 2025 est donc téléchargé lui aussi, et peut servir à valider le bloc 1. Pour s'arrêter au 30/06/2025, régler `GLDAS_END = '2025-07-01'` dans la cellule GLDAS.
+
+#### Prérequis
+
+- Un compte Google Earth Engine et un projet Google Cloud : remplacer `ee-anasseboutayeb1991` par son propre projet dans `ee.Initialize(project=...)`.
+- Le contour du bassin : le notebook lit l'asset `users/anasseboutayeb1991/Regions` (variable `study_area`). Il faut y avoir accès, ou le remplacer par son propre asset.
+
+#### Paramètres (cellule SETUP)
+
+| Paramètre | Valeur par défaut | Rôle |
+|---|---|---|
+| `start_date`, `end_date` | `'2020-01-01'`, `'2025-12-31'` | Période téléchargée ; la date de fin est incluse |
+| `METHOD` | `'direct'` | `'direct'` : chaque image est écrite tout de suite dans le Drive monté. `'tasks'` : une tâche `Export.image.toDrive` par image, beaucoup plus lent sur 6 ans |
+| `CLIP_TO_BASIN` | `True` | `False` : garde le rectangle englobant complet, sans masquer l'extérieur du bassin |
+| `NODATA` | `-9999` | Valeur des pixels sans donnée |
+| `N_WORKERS` | `8` | Téléchargements simultanés en mode `'direct'` |
+| `TASK_BATCH` | `2000` | Taille des lots de tâches en mode `'tasks'` |
+| `DRIVE_ROOT` | `'/content/drive/MyDrive'` | Dossier dans lequel sont créés les dossiers `PAPER_*` |
+
+#### Exécution
+
+1. Exécuter la cellule SETUP : elle monte Google Drive et ouvre l'authentification Earth Engine.
+2. Exécuter les cellules suivantes dans l'ordre, une par source de données. Chacune affiche les dates disponibles et signale une série tronquée ou trouée.
+3. Exécuter la dernière cellule, qui compte les fichiers présents dans chaque dossier.
+
+Une cellule peut être relancée après une interruption : les fichiers déjà présents sur Drive ne sont pas retéléchargés.
+
+#### Des rasters bruts aux entrées des modèles
+
+Les dossiers `PAPER_*` ne sont pas lus directement par les notebooks de modélisation, qui attendent le dossier `input_data_ML` et ses fichiers d'index. Les étapes suivantes restent à faire et ne sont pas fournies dans ce dépôt :
+
+- calculer les précipitations IDW et API à partir de CHIRPS ;
+- dupliquer les composites ET et NDVI sur les jours intermédiaires ;
+- ranger les rasters dans les dossiers attendus, avec les noms attendus (par exemple `MODIS_LST_Clipped/LST_20210101.tif`), puis écrire `name_files.txt` et `name_files_SR.txt`.
+
+| Dossier téléchargé | Section correspondante des fichiers d'index |
+|---|---|
+| `PAPER_GWS_GLDAS` | `GLDAS_GWS_Clipped` |
+| `PAPER_PRECIP_CHIRPS` | `CHIRPS_Clipped` ; base de `Precipitations_IDW`, `Precipitations_API` et `Precipitations_API_IDW` |
+| `PAPER_SM_SMAP` | `SMAP_SoilM_Clipped` |
+| `PAPER_RZSM_SMAP` | `SMAP_RZSM_Clipped` |
+| `PAPER_ET_MODIS` | `MODIS_ET_Clipped` |
+| `PAPER_NDVI_MODIS` | `MODIS_NDVI_Clipped` |
+| `PAPER_LST_MODIS` | `MODIS_LST_Clipped` |
+| `PAPER_QSB_ERA5LAND` | `ERA5_Qsb_Clipped` |
+| `PAPER_DEM_SRTM` | `MNT` |
+| `PAPER_SLOPE_SRTM` | `Slope` |
+| `PAPER_TWI_SRTM` | `TWI` |
+| `PAPER_DISTRIVERS_HYDROSHEDS` | `Distance_To_River` |
+
 ---
 
 ## 8. Exécution sur Google Colab
@@ -610,6 +701,8 @@ Les chemins sont relatifs à `input_data_ML`, et la date de chaque raster journa
 2. Lancer *Exécution → Tout exécuter*. Les premières cellules montent Google Drive (autoriser l'accès au compte qui contient `input_data_ML`), installent `rasterio` (et `pytorch-tabnet`, `lightgbm` ou `xgboost` selon le notebook), puis contrôlent que chaque entrée du fichier d'index correspond à un fichier présent sur Drive.
 3. Les résultats sont écrits sur Drive, dans le dossier de sortie indiqué en section 7.
 
+Le notebook de téléchargement se lance autrement : il demande une authentification Earth Engine et ne lit aucun fichier d'index (voir [7.3](#73-téléchargement-des-données-dentrée)).
+
 Le code des scripts d'origine est repris tel quel ; les lignes ajoutées ou modifiées pour Colab sont repérées par le commentaire `# [COLAB]`, et les cellules d'analyse ajoutées au notebook de l'approche proposée par `# [AJOUT]`.
 
 ### Durée de calcul de l'explicabilité
@@ -633,6 +726,6 @@ XAI_EVERY_N_DATES = 30         # une date sur 30
 | `FORECAST_START` → `FORECAST_END` | 01/07/2025 → 30/10/2025 |
 | `TEST_FRACTION` | 0,10 pour l'approche proposée et le RFR ; 0,05 pour les 15 autres modèles |
 
-Ces valeurs se modifient dans la cellule « Paramètres » de chaque notebook. Pour couvrir toute la période décrite plus haut (historique à partir du 01/01/2020, prédiction jusqu'au 31/12/2025), il faut adapter ces dates.
+Ces valeurs se modifient dans la cellule « Paramètres » de chaque notebook. Pour couvrir toute la période décrite plus haut (historique à partir du 01/01/2020, prédiction jusqu'au 31/12/2025), il faut adapter ces dates. Le notebook de téléchargement, lui, couvre par défaut toute la période (`start_date` et `end_date`, du 01/01/2020 au 31/12/2025).
 
 ---
