@@ -2,16 +2,16 @@
 
 **Bassin de l'Oum Er-Rbia, Maroc**
 
-![Schéma de l'approche : le GWS de GLDAS à 0,25°, incomplet sur 6 mois, est complété par le bloc de prédiction temporelle puis affiné à 0,05° par le bloc de descente d'échelle ; les deux blocs partagent la même préparation des variables.](assets/approche_pipeline.png)
+![Schéma de l'approche : le GWS de GLDAS à 25 km, incomplet sur 6 mois, est complété par le bloc de prédiction temporelle puis affiné à 5 km par le bloc de descente d'échelle ; les deux blocs partagent la même préparation des variables.](assets/approche_pipeline.png)
 
 *Vue d'ensemble de l'approche. Les deux cartes sont celles du 01/08/2025, une date absente des données GLDAS.*
 
 Ce travail complète et affine les données de stockage des eaux souterraines (GWS, *Groundwater Storage*) de GLDAS sur le bassin de l'Oum Er-Rbia. Il enchaîne deux blocs de prédiction, tous deux fondés sur un Random Forest « hydro-aware » :
 
-- **Bloc 1 — Prédiction temporelle :** comble les 6 mois de GWS absents de GLDAS (du 01/07/2025 au 31/12/2025), au pas journalier et à 0,25°.
-- **Bloc 2 — Descente d'échelle :** affine la résolution de 0,25° à 0,05° sur toute la période d'étude (2020 – 2025).
+- **Bloc 1 — Prédiction temporelle :** comble les 6 mois de GWS absents de GLDAS (du 01/07/2025 au 31/12/2025), au pas journalier et à 25 km.
+- **Bloc 2 — Descente d'échelle :** affine la résolution de 25 km à 5 km sur toute la période d'étude (2020 – 2025).
 
-Le résultat est une série de GWS journalière, complète et à 0,05°, du 01/01/2020 au 31/12/2025.
+Le résultat est une série de GWS journalière, complète et à 5 km, du 01/01/2020 au 31/12/2025.
 
 Les prédictions des deux blocs sont expliquées par une **approche d'explicabilité (XAI) à deux couches** : **Geo-XAI** montre *où* le modèle concentre son attention et *où* il est le moins sûr, et **HydroINV-XAI** identifie *quelle variable d'entrée* explique chaque prédiction (voir [4.5](#45-explicabilité-xai--une-approche-à-deux-couches) et [6.4](#64-explicabilité--résultats-et-interprétations)).
 
@@ -47,7 +47,7 @@ Les données GWS de GLDAS présentent deux limites sur le bassin, traitées chac
 | Limite | Constat | Réponse du pipeline |
 |---|---|---|
 | Latence temporelle | Les données ne sont pas disponibles en temps réel : le GWS journalier existe du 01/01/2020 au 30/06/2025, et il manque 6 mois, du 01/07/2025 au 31/12/2025. | **Bloc 1 — Prédiction temporelle :** prédire le GWS journalier des 6 mois manquants à partir de l'historique. |
-| Résolution grossière | La maille de 0,25° (≈ 25 km) est trop grossière pour un suivi à l'échelle d'un bassin versant. | **Bloc 2 — Descente d'échelle :** passer de 0,25° à 0,05° sur toute la période 2020 – 2025. |
+| Résolution grossière | La maille de 25 km est trop grossière pour un suivi à l'échelle d'un bassin versant. | **Bloc 2 — Descente d'échelle :** passer de 25 km à 5 km sur toute la période 2020 – 2025. |
 
 ---
 
@@ -70,8 +70,8 @@ Quatorze variables alimentent le pipeline, au pas journalier, du 01/01/2020 au 3
 
 | Variable | Pas de temps | Source | Résolution |
 |---|---|---|---|
-| Précipitations IDW | Journalier | CHIRPS Daily (dérivé) | 0,05° |
-| Précipitations API (indice antécédent) | Journalier | CHIRPS Daily (dérivé) | 0,05° |
+| Précipitations IDW | Journalier | CHIRPS Daily (dérivé) | 5 km |
+| Précipitations API (indice antécédent) | Journalier | CHIRPS Daily (dérivé) | 5 km |
 | Humidité de la zone racinaire (RZSM) | Journalier | SMAP SPL4SMGP | 11 km |
 | Humidité du sol (SM) | Journalier | SMAP SPL4SMGP | 11 km |
 | Température de surface (LST) | Journalier | MODIS MOD11A1 | 1 km |
@@ -81,7 +81,7 @@ Quatorze variables alimentent le pipeline, au pas journalier, du 01/01/2020 au 3
 | Indice topographique d'humidité (TWI) | Statique | Dérivé du SRTM | 30 m |
 | Pente | Statique | Dérivé du SRTM | 30 m |
 | Distance aux cours d'eau | Statique | Dérivé de HydroSHEDS | 30 m |
-| Stockage des eaux souterraines (GWS) — cible | Journalier | GLDAS-2.2 CLSM (`GWS_tavg`) | 0,25° |
+| Stockage des eaux souterraines (GWS) — cible | Journalier | GLDAS-2.2 CLSM (`GWS_tavg`) | 25 km |
 | sin(2π·DoY/365) et cos(2π·DoY/365) | Journalier | Calculées (saisonnalité) | — |
 
 - Les rasters non journaliers (ET, NDVI) sont dupliqués sur leur période de rééchantillonnage.
@@ -104,12 +104,12 @@ flowchart TD
         D --> E["Classement TabNet"]
         E --> F["Dé-redondance mRMR"]
     end
-    F --> G["Bloc 1 — Prédiction temporelle<br/>RFR régularisé à 0,25°<br/>GWS du 01/07 au 31/12/2025"]
+    F --> G["Bloc 1 — Prédiction temporelle<br/>RFR régularisé à 25 km<br/>GWS du 01/07 au 31/12/2025"]
     G --> H["Fusion des données<br/>série GWS complète 2020 – 2025"]
-    H --> I["Bloc 2 — Descente d'échelle<br/>RFR sur grille 0,05°<br/>interpolation bilinéaire"]
+    H --> I["Bloc 2 — Descente d'échelle<br/>RFR sur grille 5 km<br/>interpolation bilinéaire"]
     F --> I
-    I --> J["Cohérence multi-échelle<br/>recalage sur la valeur GLDAS à 0,25°"]
-    J --> K["GWS journalier, complet et à 0,05°<br/>du 01/01/2020 au 31/12/2025"]
+    I --> J["Cohérence multi-échelle<br/>recalage sur la valeur GLDAS à 25 km"]
+    J --> K["GWS journalier, complet et à 5 km<br/>du 01/01/2020 au 31/12/2025"]
     G -.-> X["Explicabilité (XAI) à deux couches<br/>Geo-XAI : attention + incertitude<br/>HydroINV-XAI : variable la plus explicative"]
     J -.-> X
 ```
@@ -220,10 +220,10 @@ R² est calculé en entraînement et en validation pour chaque scénario ; celui
 
 Le terme max(…) détecte le sur-apprentissage (R² d'entraînement supérieur au R² de validation) ; λ en règle la pénalité.
 
-### 4.4 Bloc 2 — Descente d'échelle (0,25° → 0,05°)
+### 4.4 Bloc 2 — Descente d'échelle (25 km → 5 km)
 
 1. **Fusion.** Le GWS prédit par le bloc 1 est fusionné avec l'historique : une seule série, 2020 – 2025.
-2. **Reprojection.** Toutes les variables d'entrée sont reprojetées sur la grille CHIRPS (0,05°) par interpolation bilinéaire.
+2. **Reprojection.** Toutes les variables d'entrée sont reprojetées sur la grille CHIRPS (5 km) par interpolation bilinéaire.
 3. **Enrichissement.** Mêmes étapes que le bloc 1 : graphe D-8, attention hydro-aware, ingénierie des variables, TabNet, mRMR (sans les variables sin / cos).
 4. **Prédiction.** Le RFR est entraîné sous contrainte de cohérence multi-échelle avec le GWS d'origine.
 
@@ -231,7 +231,7 @@ Le terme max(…) détecte le sur-apprentissage (R² d'entraînement supérieur 
 
 #### Module de cohérence multi-échelle
 
-Pendant l'apprentissage, les prédictions à 0,05° sont corrigées pour rester fidèles au GWS d'origine à 0,25° :
+Pendant l'apprentissage, les prédictions à 5 km sont corrigées pour rester fidèles au GWS d'origine à 25 km :
 
 ```math
 \Delta(k) = y^{\,\text{grossier}}(k) - \bar{\hat{y}}^{\,\text{affiné}}(k)
@@ -322,7 +322,7 @@ R^2 = 1 - \dfrac{\sum_{i=1}^{n} (y_i - \hat{y}_i)^2}{\sum_{i=1}^{n} (y_i - \bar{
 
 **Bloc 2 — Descente d'échelle**
 
-Les images à 0,05° sont ré-agrégées sur la grille d'origine (moyenne des pixels fins de chaque cellule à 0,25°), puis comparées aux images GLDAS par la corrélation de Pearson :
+Les images à 5 km sont ré-agrégées sur la grille d'origine (moyenne des pixels fins de chaque cellule à 25 km), puis comparées aux images GLDAS par la corrélation de Pearson :
 
 ```math
 \mathrm{Corr}(x, y) = \dfrac{\sum_{i=1}^{n} (x_i - \bar{x})(y_i - \bar{y})}{\sqrt{\sum_{i=1}^{n} (x_i - \bar{x})^2}\;\sqrt{\sum_{i=1}^{n} (y_i - \bar{y})^2}}
@@ -393,14 +393,14 @@ Modèles classés par R² décroissant.
 
 ### 6.3 Cartes de GWS prédites puis affinées
 
-Exemples de cartes produites pour quatre dates de la période prédite, absente des données GLDAS : 01/07/2025, 01/08/2025, 01/09/2025 et 01/10/2025. Chaque date est représentée à 0,25° (sortie du bloc 1) et à 0,05° (sortie du bloc 2), sur une même échelle de couleurs allant de 278 à 745 mm.
+Exemples de cartes produites pour quatre dates de la période prédite, absente des données GLDAS : 01/07/2025, 01/08/2025, 01/09/2025 et 01/10/2025. Chaque date est représentée à 25 km (sortie du bloc 1) et à 5 km (sortie du bloc 2), sur une même échelle de couleurs allant de 278 à 745 mm.
 
-![Cartes du GWS sur le bassin de l'Oum Er-Rbia aux 01/07, 01/08, 01/09 et 01/10/2025 : à gauche la prédiction temporelle à 0,25°, à droite la carte affinée à 0,05°.](assets/resultats_cartes_gws.png)
+![Cartes du GWS sur le bassin de l'Oum Er-Rbia aux 01/07, 01/08, 01/09 et 01/10/2025 : à gauche la prédiction temporelle à 25 km, à droite la carte affinée à 5 km.](assets/resultats_cartes_gws.png)
 
-*Cartes de GWS prédites à 0,25° (à gauche), puis affinées à 0,05° (à droite).*
+*Cartes de GWS prédites à 25 km (à gauche), puis affinées à 5 km (à droite).*
 
 - Les prédictions temporelles sont spatialement lisses, donc plausibles sur toute la période prédite.
-- Les cartes à 0,05° restent alignées sur les cartes à 0,25° : même structure spatiale, avec un détail nettement plus fin.
+- Les cartes à 5 km restent alignées sur les cartes à 25 km : même structure spatiale, avec un détail nettement plus fin.
 - Les résultats sont cohérents d'une date à l'autre pour les deux blocs.
 
 ### 6.4 Explicabilité : résultats et interprétations
