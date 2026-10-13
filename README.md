@@ -309,7 +309,7 @@ Les images à 5 km sont ré-agrégées sur la grille d'origine (moyenne des pixe
 ### Données de validation : mesures piézométriques de terrain
 
 - **15 puits piézométriques** répartis sur le bassin.
-- **62 jours de mesures**, entre le 24/01/2020 et le 19/04/2024.
+- **62 jours de mesures**, entre le 24/01/2020 et le 19/04/2023.
 - **Source :** Agence du Bassin Hydraulique de l'Oum Er-Rbia (ABHOER).
 
 Ces mesures servent de vérité terrain pour valider les prédictions du pipeline. Limite : un réseau plus étendu ou davantage de mesures rendrait la validation plus fiable.
