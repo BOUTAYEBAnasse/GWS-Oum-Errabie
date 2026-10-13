@@ -101,20 +101,18 @@ flowchart TD
         A["Variables d'entrée<br/>14 variables GEE"] --> B["Graphe hydrologique D-8"]
         B --> C["Attention hydro-aware"]
         C --> D["Ingénierie des variables<br/>moyenne et écart-type amont pondérés"]
-        D --> E["Classement TabNet"]
-        E --> F["Dé-redondance mRMR"]
     end
-    F --> G["Bloc 1 — Prédiction temporelle<br/>RFR régularisé à 25 km<br/>GWS du 01/07 au 31/12/2025"]
+    D --> G["Bloc 1 — Prédiction temporelle<br/>RFR régularisé à 25 km<br/>GWS du 01/07 au 31/12/2025"]
     G --> H["Fusion des données<br/>série GWS complète 2020 – 2025"]
     H --> I["Bloc 2 — Descente d'échelle<br/>RFR sur grille 5 km<br/>interpolation bilinéaire"]
-    F --> I
+    D --> I
     I --> J["Cohérence multi-échelle<br/>recalage sur la valeur GLDAS à 25 km"]
     J --> K["GWS journalier, complet et à 5 km<br/>du 01/01/2020 au 31/12/2025"]
     G -.-> X["Explicabilité (XAI) à deux couches<br/>Geo-XAI : attention + incertitude<br/>HydroINV-XAI : variable la plus explicative"]
     J -.-> X
 ```
 
-Les variables sélectionnées alimentent un Random Forest régularisé dans chacun des deux blocs. Les prédictions des deux blocs sont ensuite expliquées par la couche XAI (section 4.5).
+Les variables ainsi préparées alimentent un Random Forest régularisé dans chacun des deux blocs. Les prédictions des deux blocs sont ensuite expliquées par la couche XAI (section 4.5).
 
 ### 4.2 Préparation des variables (commune aux deux blocs)
 
@@ -163,26 +161,6 @@ w_i = \dfrac{e^{\mathrm{score}_i}}{\sum_{j=1}^{M} e^{\mathrm{score}_j}}
 
 Cette attention joue sur deux dimensions : elle filtre les variables d'entrée et calcule les poids spatiaux, pour guider l'apprentissage du Random Forest vers l'information hydrologiquement pertinente.
 
-#### Classement et sélection des variables : TabNet puis mRMR
-
-**1. Classement robuste (TabNet).** TabNet est entraîné *R* fois de façon indépendante ; I<sub>k</sub><sup>(r)</sup> est l'importance de la variable *k* à l'entraînement *r*. Le score pénalise l'instabilité entre entraînements, et les variables sont classées par score décroissant :
-
-```math
-\mu_k = \dfrac{1}{R}\sum_{r=1}^{R} I_k^{(r)}, \qquad
-\sigma_k = \mathrm{std}\!\left(I_k^{(1)}, \ldots, I_k^{(R)}\right), \qquad
-s_k^{\mathrm{robuste}} = \mu_k - \alpha_{\mathrm{robuste}}\,\sigma_k
-```
-
-**2. Dé-redondance (mRMR).** Le critère *redondance minimale, pertinence maximale* retient les variables pertinentes sans doublon d'information :
-
-```math
-\text{sélection}_{\mathrm{score}}(i) = s_i^{\mathrm{robuste}} - \alpha\left(\dfrac{1}{|S|}\sum_{j\in S} \big|\mathrm{corr}(x_i, x_j)\big|\right)
-```
-
-où *S* désigne les variables déjà retenues, corr la corrélation de Pearson, et α la pénalité de redondance avec *S*.
-
-**Regroupement.** Chaque variable brute est évaluée avec ses deux dérivées hydrologiques (moyenne et écart-type amont pondérés). Un groupe est retenu selon la moyenne des scores de ses trois variables.
-
 ### 4.3 Bloc 1 — Prédiction temporelle
 
 - **Objectif :** compléter la série GWS de GLDAS du 01/07/2025 au 31/12/2025, au pas journalier.
@@ -224,7 +202,7 @@ Le terme max(…) détecte le sur-apprentissage (R² d'entraînement supérieur 
 
 1. **Fusion.** Le GWS prédit par le bloc 1 est fusionné avec l'historique : une seule série, 2020 – 2025.
 2. **Reprojection.** Toutes les variables d'entrée sont reprojetées sur la grille CHIRPS (5 km) par interpolation bilinéaire.
-3. **Enrichissement.** Mêmes étapes que le bloc 1 : graphe D-8, attention hydro-aware, ingénierie des variables, TabNet, mRMR (sans les variables sin / cos).
+3. **Enrichissement.** Mêmes étapes que le bloc 1 : graphe D-8, attention hydro-aware, ingénierie des variables (sans les variables sin / cos).
 4. **Prédiction.** Le RFR est entraîné sous contrainte de cohérence multi-échelle avec le GWS d'origine.
 
 **Pourquoi une interpolation bilinéaire ?** Elle utilise les 4 pixels voisins, pondérés selon leur distance au pixel cible. Elle convient aux variables continues, car elle préserve la continuité spatiale au lieu de dupliquer les valeurs (plus proche voisin), pour un faible coût de calcul.
@@ -353,8 +331,7 @@ Les contributions sont ajoutées de façon cumulée au RFR de base (« — » : 
 | + Graphe D-8 | 0,9878 | 1,0179 | 2,0237 | 0,952 |
 | + Ingénierie des variables | 0,9885 | 0,9683 | 1,8846 | 0,957 |
 | + Attention hydro-aware | 0,9891 | 0,9214 | 1,6927 | 0,963 |
-| + Classement TabNet | 0,9898 | 0,8821 | 1,5038 | 0,968 |
-| + mRMR | 0,9930 | 0,8467 | 1,2894 | 0,970 |
+| + Sélection des variables | 0,9930 | 0,8467 | 1,2894 | 0,970 |
 | + Cohérence multi-échelle | — | — | — | 0,972 |
 
 Entre le RFR de base et le pipeline complet :
@@ -487,14 +464,14 @@ Les données (rasters et fichiers d'index) ne sont pas dans le dépôt : elles s
 
 `notebooks/approche_proposee/SR_GWS_HADA_HydroFE_Colab_avecXAI.ipynb`
 
-Ce notebook enchaîne la fusion des entrées, le graphe D-8 et l'attention hydro-aware (HADA), l'ingénierie des variables hydrologiques (Hydro-FE), la sélection de variables (TabNet puis mRMR), le Random Forest régularisé, l'export des prédictions à la résolution GLDAS, la descente d'échelle avec cohérence multi-échelle, puis l'explicabilité à deux couches (Geo-XAI et HydroINV-XAI) pour chaque date cartographiée.
+Ce notebook enchaîne la fusion des entrées, le graphe D-8 et l'attention hydro-aware (HADA), l'ingénierie des variables hydrologiques (Hydro-FE), le Random Forest régularisé, l'export des prédictions à la résolution GLDAS, la descente d'échelle avec cohérence multi-échelle, puis l'explicabilité à deux couches (Geo-XAI et HydroINV-XAI) pour chaque date cartographiée.
 
 | Élément | Valeur |
 |---|---|
 | Fichier d'index lu | `name_files_SR.txt` |
 | Sections attendues | `CHIRPS_Clipped`, `Precipitations_API`, `Total_GWS`, `SMAP_RZSM_Clipped` (optionnelle), `Slope`, `MNT`, `TWI`, `Distance_To_River` |
 | Dossier de sortie | `input_data_ML/SR_GWS_FUSION_HADA_HYDROFE_FS_XAI_HYDROINV_MULTI` |
-| Sorties | Rasters à résolution fine, prédictions à la résolution GLDAS (sous-dossier `COARSE_PRED`), fichiers de sélection de variables, sorties Geo-XAI (sous-dossier `XAI`) et HydroINV-XAI (sous-dossier `XAI_HYDROINV`) |
+| Sorties | Rasters à résolution fine, prédictions à la résolution GLDAS (sous-dossier `COARSE_PRED`), sorties Geo-XAI (sous-dossier `XAI`) et HydroINV-XAI (sous-dossier `XAI_HYDROINV`) |
 
 #### Sorties de l'explicabilité
 
